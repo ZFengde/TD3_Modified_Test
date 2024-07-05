@@ -157,7 +157,7 @@ class Diff_TD3(OffPolicyAlgorithm):
                 # q(s, a) to v(s, a), by using multiple actions?
                 # TODO, originally in stable baselines3 lib, need to modify
                 # s = batch, obs_dim, a = batch, n_actions, action_dim | Here evaluate for multiple state and the corresponding multiple actions
-                actor_loss = diff_loss - advantages.mean() # TODO, could be similar to PPO with a ratio and clip?
+                actor_loss = diff_loss - self.critic.q1_multi_forward(replay_data.observations, sampled_action, self.n_sampled_actions).mean() # TODO, could be similar to PPO with a ratio and clip?
                 # actor_loss = - self.critic.q1_forward(replay_data.observations, sampled_action).mean()
                 actor_losses.append(actor_loss.item())
 
