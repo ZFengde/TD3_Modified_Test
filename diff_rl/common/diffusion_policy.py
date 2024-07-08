@@ -217,20 +217,27 @@ class Diffusion_Policy(nn.Module): # forward method here is generate a sample
 
         return sample
 
-    def p_losses(self, x_start, state_feat, t, advantages, n_actions): # TODO, expand the noise to have multiple choice
+    def p_losses(self, x_start, state_feat, t, advantages, n_actions):
         noise = th.randn_like(x_start) # batch, n_actions, action_dim
 
         x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise) # this process should also involved with n_actions
         eta_theta = self.model(x_noisy, t, state_feat) # eta_theta
 
         assert noise.shape == eta_theta.shape
-        loss = th.mean(advantages * (eta_theta - noise) ** 2)
-        loss = F.mse_loss(eta_theta, noise)
+        # normalise advantages and then generate normalised weight
+        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+        weights = th.sigmoid(advantages) * 2 # is this necessary
+        # weight = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+        # loss = th.mean(weight * (eta_theta - noise) ** 2 * 5) # This is the weighted diffusion loss with multi-actions
+        # loss_compare = th.mean((eta_theta - noise) ** 2)
+        # TODO, check why not working, could be loss is too small when multipled with weight
+        loss_weighted = th.mean(weights * ((eta_theta - noise) ** 2)) # This is the weighted diffusion loss with multi-actions
+        # loss_compare = (eta_theta - noise) ** 2
 
-        return loss
+        return loss_weighted
 
     def loss(self, x, state_feat, advantages, n_actions): 
-        x = x.unsqueeze(1).expand(-1, n_actions, -1)
+        x = x.unsqueeze(1).expand(-1, n_actions, -1) # for compute the mean of diff_loss with multi actions
         state_feat = state_feat.unsqueeze(1).expand(-1, n_actions, -1)
         batch_size = len(x) # ground truth, .unsqueeze(1).expand(-1, n_actions, -1)
         t = th.randint(0, self.n_timesteps, (batch_size, n_actions), device=x.device).long()
@@ -240,7 +247,7 @@ class Diffusion_Policy(nn.Module): # forward method here is generate a sample
         state_feat = state_feat.unsqueeze(1).expand(-1, n_actions, -1)
         actions = self.sample(state_feat, n_actions)
         if n_actions == 1:
-            return actions.squeeze() # here is the action
+            return actions.squeeze() # TODO, here is the action, if in interaction should squuece, but in sampled action, shouldn't squeeze()
         else:
             return actions
     

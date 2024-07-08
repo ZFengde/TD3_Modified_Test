@@ -123,6 +123,7 @@ class Diff_TD3(OffPolicyAlgorithm):
                 # TODO, also can use a batch of actions here
                 noise = replay_data.actions.clone().data.normal_(0, self.target_policy_noise)
                 noise = noise.clamp(-self.target_noise_clip, self.target_noise_clip)
+                # next_actions is only one for each batch right now
                 next_actions = (self.actor_target(replay_data.next_observations) + noise).clamp(-1, 1)
 
                 # Compute the next Q-values: min over all critics targets
@@ -146,19 +147,15 @@ class Diff_TD3(OffPolicyAlgorithm):
             # Delayed policy updates
             if self._n_updates % self.policy_delay == 0:
                 # TODO, replaced to DPM-solver
-                # TODO, one issue here is that, diff_loss meant to minimise the difference of the 
-                # current policy distribution and the previous policy distribution, which can have negative effect
-                # especially when we refresh the data buffer, the data will suddenly become significantly different
-                # need to modify here, probably -A(MSE(epsilon_theta, epsilon))
-                # TODO, make the diffusion loss connected with Q-value by using a f(Q(s,a)), where (s,a) from buffer, actually most of the existing method using advantage function
+                # 1. sample several actions with parallel operation of the diffusion model
                 sampled_action = self.actor(obs=replay_data.observations, n_actions=self.n_sampled_actions) # Here is multiple actions
+                # 2. compute the corresponding q-values = Q(s, a) 
+                # -> values = MEAN(Q(s,a) for all possible a)
+                # -> advantages = Q(s,a) - V(S)
                 advantages = self.critic.q1_multi_forward_advantages(replay_data.observations, sampled_action, n_actions=self.n_sampled_actions)
+                # 3. Take the sampled actions as target (weighted with the corresponding advantages), compute the diff_loss
                 diff_loss = self.actor.diff_loss(replay_data.actions, replay_data.observations, advantages.detach(), self.n_sampled_actions)
-                # q(s, a) to v(s, a), by using multiple actions?
-                # TODO, originally in stable baselines3 lib, need to modify
-                # s = batch, obs_dim, a = batch, n_actions, action_dim | Here evaluate for multiple state and the corresponding multiple actions
                 actor_loss = diff_loss - self.critic.q1_multi_forward(replay_data.observations, sampled_action, self.n_sampled_actions).mean() # TODO, could be similar to PPO with a ratio and clip?
-                # actor_loss = - self.critic.q1_forward(replay_data.observations, sampled_action).mean()
                 actor_losses.append(actor_loss.item())
 
                 # Optimize the actor

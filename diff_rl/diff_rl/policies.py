@@ -60,7 +60,7 @@ class Actor(BasePolicy):
         features = self.extract_features(obs, self.features_extractor) # flatten
         return self.mu(features, n_actions)
     
-    def diff_loss(self, actions, obs, advantages, n_actions): # TODO, should involve multi actions and advantages here
+    def diff_loss(self, actions, obs, advantages, n_actions):
         features = self.extract_features(obs, self.features_extractor)
         diff_loss = self.mu.loss(actions, features, advantages, n_actions)
         return diff_loss
